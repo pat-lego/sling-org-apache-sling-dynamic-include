@@ -25,6 +25,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -35,6 +36,7 @@ import javax.servlet.ServletResponse;
 
 import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.felix.scr.annotations.Property;
 import org.apache.felix.scr.annotations.Reference;
 import org.apache.felix.scr.annotations.sling.SlingFilter;
 import org.apache.felix.scr.annotations.sling.SlingFilterScope;
@@ -44,15 +46,24 @@ import org.apache.sling.api.resource.ResourceUtil;
 import org.apache.sling.dynamicinclude.generator.IncludeGenerator;
 import org.apache.sling.dynamicinclude.generator.IncludeGeneratorWhiteboard;
 import org.apache.sling.dynamicinclude.impl.UrlBuilder;
+import org.apache.sling.commons.osgi.PropertiesUtil;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-@SlingFilter(scope = SlingFilterScope.INCLUDE, order = -500)
+import aQute.bnd.annotation.component.Activate;
+
+@SlingFilter(scope = SlingFilterScope.INCLUDE, order = -500, metatype = true)
 public class IncludeTagFilter implements Filter {
 
     private static final Logger LOG = LoggerFactory.getLogger(IncludeTagFilter.class);
 
     private static final String COMMENT = "<!-- SDI include (path: %s, resourceType: %s) -->\n";
+
+    @Property(boolValue = false, description = "Enable Organization Chart Resource", label = "Org Chart Enable", name = "ENABLE_ORG")
+    private final String ENABLE_ORG = "ENABLE_ORG";
+
+    private boolean orgChartEnabled = false;
 
     @Reference
     private ConfigurationWhiteboard configurationWhiteboard;
@@ -161,9 +172,15 @@ public class IncludeTagFilter implements Filter {
 
     private String buildUrl(Configuration config, SlingHttpServletRequest request) {
         final Resource resource = request.getResource();
-
-        final boolean synthetic = ResourceUtil.isSyntheticResource(request.getResource());
-        return UrlBuilder.buildUrl(config.getIncludeSelector(), resource.getResourceType(), synthetic, config, request.getRequestPathInfo());
+        if (this.orgChartEnabled) {
+            Resource org = resource.getResourceResolver().getResource("/content/panorama/en/organizational-chart");
+            return UrlBuilder.buildUrl(config.getIncludeSelector(), org.getResourceType(), false, config,
+                    request.getRequestPathInfo());
+        } else {
+            final boolean synthetic = ResourceUtil.isSyntheticResource(request.getResource());
+            return UrlBuilder.buildUrl(config.getIncludeSelector(), resource.getResourceType(), synthetic, config,
+                    request.getRequestPathInfo());
+        }
     }
 
     private static String sanitize(String path) {
@@ -184,5 +201,10 @@ public class IncludeTagFilter implements Filter {
 
     @Override
     public void destroy() {
+    }
+
+    @Activate
+    protected void activate(Map<String, Object> props) {
+        this.orgChartEnabled = PropertiesUtil.toBoolean(props.get(ENABLE_ORG), false);
     }
 }
